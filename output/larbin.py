@@ -45,6 +45,8 @@ class LarbinOutputSystem:
 
     def save(self, page):
         dummmy, ext = os.path.splitext(page.url)
+        if len(ext) > 5:
+            ext = ''
         name = os.path.join(self.basename, self.currentdir, 'f%06d' % self.filecounter) + ext.lower()
         fd = open(name, 'w')
         self.indexfile.write('%06d\t%s\n' % (self.filecounter, page.url))

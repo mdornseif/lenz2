@@ -4,6 +4,7 @@
 
 import logging
 log = logging.getLogger(__name__)
+log.setLevel(logging.INFO) 
 
 import httplib, socket, mimetools
 from urlparse import urlparse
@@ -11,48 +12,18 @@ import pycurl
 import servers
 
 from config import config
+from status import status
 
-
-class Download(mimetools.Message):
+class HTTPResponse(mimetools.Message):
     """Handler for downloading data from URLs.
 
-    Somewhat reesembling httplibs HTTPReply
+    Somewhat reesembling httplibs HTTPReply.
     """
     
-    def __init__(self, curl):
-        self.headerstmp = []
-        self.body = ''
-        self.curl = curl
-        self.curl.setopt(pycurl.WRITEFUNCTION, self.body_callback)
-        self.curl.setopt(pycurl.HEADERFUNCTION, self.header_callback)
-
-        
-    def header_callback(self, data):
-        self.headerstmp.append(data)
-
-
-    def body_callback(self, data):
-        self.body += data
-
-
-    def addheader(self, key, value):
-        """Add header for field key handling repeats."""
-        prev = self.dict.get(key)
-        if prev is None:
-            self.dict[key] = value
-        else:
-            combined = ", ".join((prev, value))
-            self.dict[key] = combined
-
-
-    def addcontinue(self, key, more):
-        """Add more field data from a continuation line."""
-        prev = self.dict[key]
-        self.dict[key] = prev + "\n " + more
-
-
-    def finalize(self): 
-        self.status = self.curl.getinfo(pycurl.RESPONSE_CODE)
+    def __init__(self, curl, headers, body):
+        self.status = curl.getinfo(pycurl.RESPONSE_CODE)
+        self.type = curl.getinfo(pycurl.CONTENT_TYPE)
+        self.url = curl.getinfo(pycurl.EFFECTIVE_URL)
 
         # construct haders
         firstline = 1
@@ -60,7 +31,7 @@ class Download(mimetools.Message):
         self.headers = hlist = []
         headerseen = ""
  
-        for line in self.headerstmp:
+        for line in headers:
             line = line.rstrip()
             firstline = 0
             if self.islast(line):
@@ -83,137 +54,153 @@ class Download(mimetools.Message):
                 self.addheader(headerseen, line[len(headerseen)+1:].strip())
                 continue
 
-        del self.headerstmp
-        self.addheader('X-LENZ-HTTP-Status', str(self.curl.getinfo(pycurl.HTTP_CODE)))
-        self.addheader('X-LENZ-Effective-URL', self.curl.getinfo(pycurl.EFFECTIVE_URL))
-        self.addheader('X-LENZ-Redirect-Count', str(self.curl.getinfo(pycurl.REDIRECT_COUNT)))
+        self.addheader('X-LENZ-HTTP-Status', str(curl.getinfo(pycurl.HTTP_CODE)))
+        self.addheader('X-LENZ-Effective-URL', curl.getinfo(pycurl.EFFECTIVE_URL))
+        self.addheader('X-LENZ-Redirect-Count', str(curl.getinfo(pycurl.REDIRECT_COUNT)))
 
-        self.type = self.curl.getinfo(pycurl.CONTENT_TYPE)
-        
-        #self.addheader('X-LENZ-TOTAL_TIME', str(self.curl.getinfo(pycurl.TOTAL_TIME)))
-        #self.addheader('X-LENZ-NAMELOOKUP_TIME', str(self.curl.getinfo(pycurl.NAMELOOKUP_TIME)))
-        #self.addheader('X-LENZ-CONNECT_TIME', str(self.curl.getinfo(pycurl.CONNECT_TIME)))
-        #self.addheader('X-LENZ-SPEED_DOWNLOAD', str(self.curl.getinfo(pycurl.SPEED_DOWNLOAD)))
-        
+        status.curl_total_time.append(curl.getinfo(pycurl.TOTAL_TIME))
+        status.curl_namelookup_time.append(curl.getinfo(pycurl.NAMELOOKUP_TIME))
+        status.curl_connect_time.append(curl.getinfo(pycurl.NAMELOOKUP_TIME))
+        status.curl_speed_download.append(curl.getinfo(pycurl.SPEED_DOWNLOAD))
 
-def get_curl_handle():
-    c = pycurl.Curl() 
-    c.setopt(pycurl.VERBOSE, config.http_debug)
-    c.setopt(pycurl.FOLLOWLOCATION, 1)
-    c.setopt(pycurl.MAXREDIRS, 5)
-    c.setopt(pycurl.USERAGENT, config.http_useragent)
-    c.setopt(pycurl.ENCODING, 'identity')
-    c.setopt(pycurl.COOKIEJAR, '.cookies.txt')
-    c.setopt(pycurl.COOKIEFILE, '.cookies.txt')
-    c.setopt(pycurl.HTTPHEADER, ['Accept: %s' % config.http_accept])
-    c.setopt(pycurl.DNS_CACHE_TIMEOUT, 3600)
-    c.setopt(pycurl.CONNECTTIMEOUT, config.http_timeout)
-    c.setopt(pycurl.IPRESOLVE, pycurl.IPRESOLVE_V4)
-    return c
+        del headers
+        self.body = body
+        del body
+        del curl
+        
+        
+    def addheader(self, key, value):
+        """Add header for field key handling repeats."""
+        prev = self.dict.get(key)
+        if prev is None:
+            self.dict[key] = value
+        else:
+            combined = ", ".join((prev, value))
+            self.dict[key] = combined
+
+    def addcontinue(self, key, more):
+        """Add more field data from a continuation line."""
+        prev = self.dict[key]
+        self.dict[key] = prev + "\n " + more
+
+    def __repr__(self):
+        v = vars(self)
+        if 'body' in self.dict:
+            v['body'] = v['body'][:30] + '...'
+        return str(v)
+        
+class Curly:
+    def __init__(self):
+        self.curl = pycurl.Curl()
+        self.curl.setopt(pycurl.VERBOSE, config.http_debug)
+        self.curl.setopt(pycurl.FOLLOWLOCATION, 1)
+        self.curl.setopt(pycurl.MAXREDIRS, 5)
+        self.curl.setopt(pycurl.USERAGENT, config.http_useragent)
+        self.curl.setopt(pycurl.ENCODING, 'identity')
+        self.curl.setopt(pycurl.COOKIEJAR, 'cookies.txt')
+        self.curl.setopt(pycurl.COOKIEFILE, 'cookies.txt')
+        self.curl.setopt(pycurl.HTTPHEADER, ['Accept: %s' % config.http_accept])
+        self.curl.setopt(pycurl.DNS_CACHE_TIMEOUT, 3600)
+        self.curl.setopt(pycurl.CONNECTTIMEOUT, config.http_timeout)
+        self.curl.setopt(pycurl.IPRESOLVE, pycurl.IPRESOLVE_V4)
+        self.curl.setopt(pycurl.WRITEFUNCTION, self.body_callback)
+        self.curl.setopt(pycurl.HEADERFUNCTION, self.header_callback)
+        self.reinit()
+        # beware - this creates a circular reference
+        self.curl.curly = self
+
+    def reinit(self):
+        self.headerstmp = []
+        self.body = ''
+        self.done_callback = None
+        
+    def header_callback(self, data):
+        self.headerstmp.append(data)
+
+    def body_callback(self, data):
+        self.body += data
+
+    def setCallback(self, callback):
+        self.done_callback = callback
+        
+    def setUrl(self, url):
+        self.curl.setopt(pycurl.URL, url)
+
+    def done(self):
+        if self.done_callback:
+            response = HTTPResponse(self.curl, self.headerstmp, self.body)
+            del self.headerstmp
+            del self.body
+            self.done_callback(response)
+        self.reinit()
+
 
 class MultiCurl:
     def __init__(self):
         self.m = pycurl.CurlMulti()
         self.handles = {}
+        self.freelist = []
 
-    def add(self, handle):
+        
+    def addHandle(self, handle):
         self.handles[handle] = True
-        self.m.add_handle(handle)
+        self.m.add_handle(handle.curl)
+        status.active_downloads += 1
+
+    def getHandle(self):
+        if len(self.freelist) > 0:
+            handle = self.freelist.pop()
+        else:
+            handle = Curly()
+        self.addHandle(handle)
+        return handle
+
 
     def loop(self):
+        # Run the internal curl state machine for the multi stack
         while 1:
             ret, num_handles = self.m.perform()
             if ret != pycurl.E_CALL_MULTI_PERFORM:
                 break
             
-        while num_handles:
+        #while num_handles:
+        if 1:
             ret = self.m.select()
-            if ret == -1:
-                continue
-            while 1:
-                ret, num_handles = self.m.perform()
-                if ret != pycurl.E_CALL_MULTI_PERFORM:
-                    break
+            if ret != -1:
+                while 1:
+                    ret, num_handles = self.m.perform()
+                    if ret != pycurl.E_CALL_MULTI_PERFORM:
+                        break
 
+        # Check for curl objects which have terminated, and add them to the freelist
+        while 1:
+            num_q, ok_list, err_list = self.m.info_read()
+            for c in ok_list:
+                self.m.remove_handle(c)
+                status.active_downloads -= 1
+                status.download_successes +=1
+                log.debug("Success: %s" % c.getinfo(pycurl.EFFECTIVE_URL))
+                c.curly.done()
+                self.freelist.append(c.curly)
+            for c, errno, errmsg in err_list:
+                self.m.remove_handle(c)
+                status.active_downloads -= 1
+                status.download_failures +=1
+                log.warn("Failed: %r %s" % (errno, errmsg))
+                self.freelist.append(c.curly)
+                c.curly.done()
+            if num_q == 0:
+                break
+                
 eventloop = MultiCurl()
 
-
-def request(page, url):
-    servers.noteAccess(url)
-    log.info('retriving %r' % url)
-    (scheme, networklocation, path, parameters, query, fragment) = urlparse(url)
-    host = networklocation.split(':')[0]
-
-    c = get_curl_handle()
-    d = Download(c)
-    c.setopt(c.URL, url)
-
-    eventloop.add(c)
-    eventloop.loop()
-    
-    # try:
-    #     c.perform()
-    # except pycurl.error, msg:
-    #    log.error("*** %s" % msg)
-    #    return None    
-        
-    d.finalize()
-    
-    page.header = d
-    page.data = d.body
-    
-    if d.status == 200:
-        page.url = url
-    elif d.status == 204:        # No Content
-        return None
-    elif d.status in [300,       # Multiple Choices
-                      302,       # Found - not really sure how to handle this
-                      ]:        
-        # XXX this could be handled much smarter
-        return None
-    elif d.status in [400,
-                      401,       # unauthorized
-                      403,       # access denied
-                      404,       # not fond
-                      405,       # method no supported
-                      410,       # Gone
-                      414,       # Request URI Too Large
-                      423,       # Locked
-                      ]:
-        return None
-    elif d.status in [500,              # internal error
-                      502,              # Bad Gateway
-                      0,                # No Header was send 
-                      ]:
-        return None    
-    else:
-        # print vars(d)
-        log.exception("unknown response code %r" % d.status)
-        raise RuntimeError, "unknown response code %r" % d.status
-    return page
-
+loop = eventloop.loop
 
 def fetch(page):
-    try:
-        return request(page, page.url)    
-    except socket.error, msg:
-        print "***", msg, page
-        return None
-    except UnicodeError, msg:
-        print "***", msg, page
-        return None
+    servers.noteAccess(page.url)
+    log.info('retriving %r' % page.url)
+    c = eventloop.getHandle()
+    c.setCallback(page.receivedFromNetwork)
+    c.setUrl(page.url)
+    eventloop.loop()
 
-if __name__ == '__main__':
-    import socket
-
-    class Page:
-        def __init__(self):
-            self.urls = []
-
-    request(Page(), 'http://md.hudora.de/blog')
-    for x in open('starturls.txt'):
-        try:
-            request(Page(), x.strip())
-        except socket.error:
-            pass
-        

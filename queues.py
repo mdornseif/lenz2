@@ -4,6 +4,7 @@
 
 import logging
 log = logging.getLogger(__name__)
+log.setLevel(logging.WARN) 
 
 import random
 import urlnorm
@@ -66,6 +67,6 @@ documentfetchqueue = FetchQueue()
 
 pagefetchqueue = FetchQueue()
 pagefetchqueue.extend(config.starturls)
-for x in open('starturls.txt'):
-    pagefetchqueue.add(x.strip())
+#for x in open('starturls.txt'):
+#    pagefetchqueue.add(x.strip())
 random.shuffle(config.starturls)

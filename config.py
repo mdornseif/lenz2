@@ -73,10 +73,12 @@ config.pagedir = 'pages'
 config.minservergraceperiod = 20
 config.averageservergraceperiod = 60
 
+config.paralell_downloads = 15
+
 #
 config.http_useragent = 'Mozilla/5.0 (Macintosh; U; PPC Mac OS X; en) AppleWebKit/125.2 (KHTML, like Gecko) Safari/125.8'
 config.http_accept = '*/*'
-config.http_debug = 1
+config.http_debug = 0
 config.http_timeout = 60
 #
 config.supportedprotocols = ['http', 'https']
