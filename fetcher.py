@@ -157,15 +157,10 @@ class MultiCurl:
 
 
     def loop(self):
-        # Run the internal curl state machine for the multi stack
-        while 1:
-            ret, num_handles = self.m.perform()
-            if ret != pycurl.E_CALL_MULTI_PERFORM:
-                break
-            
+        # Run the internal curl state machine for the multi stack            
         #while num_handles:
         if 1:
-            ret = self.m.select()
+            ret = self.m.select(0.001)
             if ret != -1:
                 while 1:
                     ret, num_handles = self.m.perform()
@@ -186,7 +181,7 @@ class MultiCurl:
                 self.m.remove_handle(c)
                 status.active_downloads -= 1
                 status.download_failures +=1
-                log.warn("Failed: %r %s" % (errno, errmsg))
+                log.warn("Failed: %r, %r %s" % (c.getinfo(pycurl.EFFECTIVE_URL), errno, errmsg))
                 self.freelist.append(c.curly)
                 c.curly.done()
             if num_q == 0:
@@ -202,5 +197,5 @@ def fetch(page):
     c = eventloop.getHandle()
     c.setCallback(page.receivedFromNetwork)
     c.setUrl(page.url)
-    eventloop.loop()
+    #eventloop.loop()
 

@@ -9,12 +9,12 @@ class LarbinOutputSystem:
 
     def __init__(self, directory):
         """Directory is where to save the oputput."""
-        
+        self.maxfilesperdir = 2000 
         self.basename = directory
         if not os.path.exists(self.basename):
             os.makedirs(self.basename)
         self.currentdir = '%06d' % self.findlastdir()
-        self.nextdir()
+        self.nextDir()
 
 
     def findlastdir(self):
@@ -28,7 +28,7 @@ class LarbinOutputSystem:
         return maxdir
 
 
-    def nextdir(self):
+    def nextDir(self):
         cur = int(self.currentdir)
         cur += 1
         self.currentdir = '%06d' % cur  
@@ -40,7 +40,7 @@ class LarbinOutputSystem:
 
 
     def savePagefile(self, page, fd):
-        fd.write(page.getData())
+        fd.write(page.body)
 
 
     def save(self, page):
@@ -49,6 +49,7 @@ class LarbinOutputSystem:
             ext = ''
         name = os.path.join(self.basename, self.currentdir, 'f%06d' % self.filecounter) + ext.lower()
         fd = open(name, 'w')
+        self.savePagefile(page, fd)
         self.indexfile.write('%06d\t%s\n' % (self.filecounter, page.url))
         self.filecounter +=1
         self.indexfile.flush()
@@ -57,6 +58,9 @@ class LarbinOutputSystem:
         fd = open(name, 'w')
         fd.write(str(page.header))
         fd.close()
+
+        if self.filecounter > self.maxfilesperdir:
+            self.nextDir()
 
 class LarbinLowMemOutputSystem(LarbinOutputSystem):
     """Avoids reading the whole file into Memory"""
