@@ -1,0 +1,4 @@
+larbin3 needs:
+* Python 2.3
+* py-bsddb3
+* pycurl

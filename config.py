@@ -12,8 +12,15 @@ config = Config()
 # file extensions which we will try to handle as documents
 config.documentsuffixes = ['.doc', '.xls', '.ppt']
 # mimetypes we will definitively handle as documents
-config.documentmimetypes = ['application/msword', 'application/vnd.ms-excel',
-                            'application/vnd.ms-powerpoint']
+config.documentmimetypes = ['application/msexel',
+                            'application/mspowerpoint',
+                            'application/msword',
+                            'application/octet-stream',
+                            'application/vnd.ms-excel',
+                            'application/vnd.ms-powerpoint',
+                            'application/vnd.ms-word',
+                            'application/xls',
+                            ]
 
 # file extensions we will never consider to be pages
 config.nonpagesuffixes = ['.exe',
@@ -42,6 +49,7 @@ config.starturls = ['http://md.hudora.de/',
                     'http://news.google.com/',
                     'http://www.technorati.com/cosmos/breakingnews.html',
                     'http://blo.gs/',
+                    'http://www.popdex.com/',
                     ]
 
 # where to save documents
