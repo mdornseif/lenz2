@@ -1,0 +1,56 @@
+* dupes while fetching: ignoring Content-Type: text/plain
+  http://www.ccc.de/Hackerethik.html;
+  http://www.ulm.ccc.de/dvd/nist-0.6.tgz
+  http://www.ulm.ccc.de/dvd/more-code-for-reading-descrambling-dvd
+  ignoring Content-Type: text/plain http://c0re.jp/c0de/coldcut/coldcut.py
+
+* http status 0: http://berlin.ccc.de,
+  http://berlin.ccc.de:2342/kaos-mq http://muccc.paf.net
+
+* clean handling of 404
+
+* http://c0re.23.nu/../??
+
+* changing resolver timeout: ERROR - error while resolving IP:
+  'berlin.ccc.de', 'Timed out'
+
+* prediction of mime types (*.tar.gz, *.tgz ...)
+
+* eingebauter webserver
+
+* handling von urls mit IPs
+
+* metrik / distance
+
+* dupecheck clean
+
+* documentsizelimit
+
+* text/plain handler
+
+* detector for CGI - Traps
+
+* Anti-Robot META Tags
+<meta name="robots" content="index | noindex, follow |nofollow"> OR
+<meta name="robots" content="all | none"> 
+
+Note that syntax is NOT case-sensitive.
+
+INDEX directs the robot to index the page.
+NOINDEX directs the robot not to index the page.
+FOLLOW directs the robot to follow links on the page.
+NOFOLLOW directs the robot not to follow links on the page.
+ALL is the same as INDEX, FOLLOW
+NONE is the same as NOINDEX. NOFOLLOW
+
+This allows the following combinations:
+<meta name="robots" content="index,follow"> 
+<meta name="robots" content="noindex,follow"> 
+<meta name="robots" content="index,nofollow"> 
+<meta name="robots" content="noindex,nofollow">
+<meta name="robots" content="all">
+<meta name="robots" content="none"> 
+
+
+* META REFRESH Tag
+
