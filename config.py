@@ -64,7 +64,7 @@ config.starturls = ['http://md.hudora.de/',
                     ]
 for x in open('starturls.txt'):
     config.starturls.append(x.strip())
-random.shuffle(config.starturls)
+#random.shuffle(config.starturls)
 
 # where to save documents
 config.documentdir = 'documents'

@@ -18,6 +18,7 @@ documentoutput = LarbinLowMemOutputSystem(config.documentdir)
 pageoutput = LarbinOutputSystem(config.pagedir)
 
 
+
 class Page:
     def __init__(self):
         self.urls = []
@@ -93,11 +94,9 @@ def main():
         while documentfetchqueue:
             fetch_a_document()
             time.sleep(.1)
-        print '\n\n\ndupelist: %d, pagefetchqueue: %d, pageparsequeue: %d, documentfetchqueue: %d\n\n\n' %(len(dupelist), len(pagefetchqueue), len(pageparsequeue), len(documentfetchqueue))
         if pagefetchqueue:
             fetch_a_page()
             time.sleep(.1)
-        print '\n\n\ndupelist: %d, pagefetchqueue: %d, pageparsequeue: %d, documentfetchqueue: %d\n\n\n' %(len(dupelist), len(pagefetchqueue), len(pageparsequeue), len(documentfetchqueue))
         if pageparsequeue:
             parse_a_page()
             time.sleep(.1)
