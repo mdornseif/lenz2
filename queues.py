@@ -6,18 +6,12 @@ import logging
 log = logging.getLogger(__name__)
 log.setLevel(logging.WARN) 
 
-import random
 import urlnorm
 import servers
 from config import config
+import random
 
-
-class DupeList(dict):
-    def add(self, item):
-        self[item.strip()] = True
-
-dupelist = DupeList()
-
+from dupelist import dupelist
 
 class ProcessQueue(list):
     def add(self, item):
@@ -44,10 +38,9 @@ class FetchQueue(ProcessQueue):
         scheme = item.split(':')[0]
         if scheme in config.supportedprotocols:
             item = self.normalize(item)
-            if item not in dupelist:
+            if not dupelist.seen(item):
                 log.debug('adding %r' % item)
                 self.append(item.strip())
-                dupelist.add(item)
             else:
                 log.debug('dupe %r is not added' % item)
         else:

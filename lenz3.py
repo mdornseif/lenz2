@@ -135,7 +135,7 @@ def parse_a_page():
 
     added = 0
     for link in links:
-        if link not in dupelist and 'osdn.safaribooksonline.com' not in link:
+        if not dupelist.seen(link) and 'osdn.safaribooksonline.com' not in link:
             dummmy, ext = os.path.splitext(link)
             ext = ext.lower()
             if ext in config.documentsuffixes:
