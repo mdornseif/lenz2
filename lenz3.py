@@ -2,6 +2,13 @@
 
 # $Id$ 
 
+
+import logging
+logging.basicConfig()
+
+log = logging.getLogger()
+log.setLevel(logging.DEBUG) #set verbosity to show all messages of severity >= DEBUG
+
 import os, time
 import urllib
 
@@ -77,6 +84,7 @@ def parse_a_page():
         print "***", msg
         return None
 
+    log.debug('%d links extracted form %r' % (len(links), page.url))
     for link in links:
         if link not in dupelist:
             dummmy, ext = os.path.splitext(link)
@@ -90,16 +98,16 @@ def parse_a_page():
     
 def main():
     while len(pagefetchqueue) + len(pageparsequeue) > 0:
-        print '\n\n\ndupelist: %d, pagefetchqueue: %d, pageparsequeue: %d, documentfetchqueue: %d\n\n\n' %(len(dupelist), len(pagefetchqueue), len(pageparsequeue), len(documentfetchqueue))
-        while documentfetchqueue:
+        log.info('dupelist: %d, pagefetchqueue: %d, pageparsequeue: %d, documentfetchqueue: %d' %(len(dupelist), len(pagefetchqueue), len(pageparsequeue), len(documentfetchqueue)))
+        if documentfetchqueue:
             fetch_a_document()
-            time.sleep(.1)
+            time.sleep(1)
         if pagefetchqueue:
             fetch_a_page()
-            time.sleep(.1)
+            time.sleep(1)
         if pageparsequeue:
             parse_a_page()
-            time.sleep(.1)
+            time.sleep(1)
     
 
 main()

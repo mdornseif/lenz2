@@ -1,6 +1,9 @@
 #!/usr/bin/python
 
-# $Id$ 
+# $Id:$ 
+
+import logging
+log = logging.getLogger(__name__)
 
 import httplib, socket, mimetools
 from urlparse import urlparse
@@ -9,8 +12,28 @@ import servers
 
 from config import config
 
-#class response
-class HTTPMessage(mimetools.Message):
+
+class Download(mimetools.Message):
+    """Handler for downloading data from URLs.
+
+    Somewhat reesembling httplibs HTTPReply
+    """
+    
+    def __init__(self, curl):
+        self.headerstmp = []
+        self.body = ''
+        self.curl = curl
+        self.curl.setopt(pycurl.WRITEFUNCTION, self.body_callback)
+        self.curl.setopt(pycurl.HEADERFUNCTION, self.header_callback)
+
+        
+    def header_callback(self, data):
+        self.headerstmp.append(data)
+
+
+    def body_callback(self, data):
+        self.body += data
+
 
     def addheader(self, key, value):
         """Add header for field key handling repeats."""
@@ -21,40 +44,29 @@ class HTTPMessage(mimetools.Message):
             combined = ", ".join((prev, value))
             self.dict[key] = combined
 
+
     def addcontinue(self, key, more):
         """Add more field data from a continuation line."""
         prev = self.dict[key]
         self.dict[key] = prev + "\n " + more
 
-    def readheaders(self):
-        self.dict = {}
-        self.unixfrom = ''
-        self.headers = hlist = []
-        self.status = ''
-        headerseen = ""
+
+    def finalize(self): 
+        self.status = self.curl.getinfo(pycurl.RESPONSE_CODE)
+
+        # construct haders
         firstline = 1
-        startofline = unread = tell = None
-        if hasattr(self.fp, 'unread'):
-            unread = self.fp.unread
-        elif self.seekable:
-            tell = self.fp.tell
-        while True:
-            if tell:
-                try:
-                    startofline = tell()
-                except IOError:
-                    startofline = tell = None
-                    self.seekable = 0
-            line = self.fp.readline()
-            if not line:
-                self.status = 'EOF in headers'
-                break
-            # Skip unix From name time lines
-            if firstline and line.startswith('From '):
-                self.unixfrom = self.unixfrom + line
-                continue
+        self.dict = {}
+        self.headers = hlist = []
+        headerseen = ""
+ 
+        for line in self.headerstmp:
+            line = line.rstrip()
             firstline = 0
-            if headerseen and line[0] in ' \t':
+            if self.islast(line):
+                # Note! No pushback here!  The delimiter line gets eaten.
+                break
+            elif headerseen and line and line[0] in ' \t':
                 # XXX Not sure if continuation lines are handled properly
                 # for http and/or for repeating headers
                 # It's a continuation line.
@@ -64,171 +76,120 @@ class HTTPMessage(mimetools.Message):
             elif self.iscomment(line):
                 # It's a comment.  Ignore it.
                 continue
-            elif self.islast(line):
-                # Note! No pushback here!  The delimiter line gets eaten.
-                break
             headerseen = self.isheader(line)
             if headerseen:
                 # It's a legal header line, save it.
                 hlist.append(line)
                 self.addheader(headerseen, line[len(headerseen)+1:].strip())
                 continue
-            else:
-                # It's not a header line; throw it back and stop here.
-                if not self.dict:
-                    self.status = 'No headers'
-                else:
-                    self.status = 'Non-header line where header expected'
-                # Try to undo the read.
-                if unread:
-                    unread(line)
-                elif tell:
-                    self.fp.seek(startofline)
-                else:
-                    self.status = self.status + '; bad seek'
-                break
 
-class HTTPResponse:
+        del self.headerstmp
+        self.addheader('X-LENZ-HTTP-Status', str(self.curl.getinfo(pycurl.HTTP_CODE)))
+        self.addheader('X-LENZ-Effective-URL', self.curl.getinfo(pycurl.EFFECTIVE_URL))
+        self.addheader('X-LENZ-Redirect-Count', str(self.curl.getinfo(pycurl.REDIRECT_COUNT)))
 
-    # strict: If true, raise BadStatusLine if the status line can't be
-    # parsed as a valid HTTP/1.0 or 1.1 status line.  By default it is
-    # false because it prevents clients from talking to HTTP/0.9
-    # servers.  Note that a response with a sufficiently corrupted
-    # status line will look like an HTTP/0.9 response.
+        self.type = self.curl.getinfo(pycurl.CONTENT_TYPE)
+        
+        #self.addheader('X-LENZ-TOTAL_TIME', str(self.curl.getinfo(pycurl.TOTAL_TIME)))
+        #self.addheader('X-LENZ-NAMELOOKUP_TIME', str(self.curl.getinfo(pycurl.NAMELOOKUP_TIME)))
+        #self.addheader('X-LENZ-CONNECT_TIME', str(self.curl.getinfo(pycurl.CONNECT_TIME)))
+        #self.addheader('X-LENZ-SPEED_DOWNLOAD', str(self.curl.getinfo(pycurl.SPEED_DOWNLOAD)))
+        
 
-    # See RFC 2616 sec 19.6 and RFC 1945 sec 6 for details.
+def get_curl_handle():
+    c = pycurl.Curl() 
+    c.setopt(pycurl.VERBOSE, config.http_debug)
+    c.setopt(pycurl.FOLLOWLOCATION, 1)
+    c.setopt(pycurl.MAXREDIRS, 5)
+    c.setopt(pycurl.USERAGENT, config.http_useragent)
+    c.setopt(pycurl.ENCODING, 'identity')
+    c.setopt(pycurl.COOKIEJAR, '.cookies.txt')
+    c.setopt(pycurl.COOKIEFILE, '.cookies.txt')
+    c.setopt(pycurl.HTTPHEADER, ['Accept: %s' % config.http_accept])
+    c.setopt(pycurl.DNS_CACHE_TIMEOUT, 3600)
+    c.setopt(pycurl.CONNECTTIMEOUT, config.http_timeout)
+    c.setopt(pycurl.IPRESOLVE, pycurl.IPRESOLVE_V4)
+    return c
 
+class MultiCurl:
     def __init__(self):
-        self.headerstmp = []
-        self.bodytmp = []
+        self.m = pycurl.CurlMulti()
+        self.handles = {}
 
+    def add(self, handle):
+        self.handles[handle] = True
+        self.m.add_handle(handle)
 
-    def header_callback(self, data):
-        self.headerstmp.append(data)
+    def loop(self):
+        while 1:
+            ret, num_handles = self.m.perform()
+            if ret != pycurl.E_CALL_MULTI_PERFORM:
+                break
+            
+        while num_handles:
+            ret = self.m.select()
+            if ret == -1:
+                continue
+            while 1:
+                ret, num_handles = self.m.perform()
+                if ret != pycurl.E_CALL_MULTI_PERFORM:
+                    break
 
-    def body_callback(self, data):
-        self.bodytmp.append(data)
+eventloop = MultiCurl()
 
-    def finalize(self):
-        print self.headerstmp
-        print self.bodytmp
-        self.header = ''.join(self.headerstmp) 
-        self.body = ''.join(self.bodytmp)
 
 def request(page, url):
     servers.noteAccess(url)
-    print repr(url)
+    log.info('retriving %r' % url)
     (scheme, networklocation, path, parameters, query, fragment) = urlparse(url)
     host = networklocation.split(':')[0]
-    c = pycurl.Curl() 
-    try:
-        h = httplib.HTTPConnection(networklocation)
-    except httplib.InvalidURL, msg:
-        # XXX we should try to parse things like http://bxyqwq:olacfy@213.239.160.18/flz/fdr/barely/index.htm
-        print "***", msg
-        return None
-    h.set_debuglevel(config.http_debug)
-    if query:
-        h.putrequest('GET', '%s?%s' % (path, query))
-    else:
-        h.putrequest('GET', path)
-    h.putheader('Accept', config.http_accept)
-    h.putheader('User-agent', config.http_useragent)
-    r = HTTPResponse()
-    c.setopt(c.URL, url)
-    c.setopt(c.HTTPHEADER, [config.http_useragent])
-    c.setopt(pycurl.VERBOSE, 1)
-    c.setopt(c.WRITEFUNCTION, r.body_callback)
-    c.setopt(c.HEADERFUNCTION, r.header_callback)
-    c.setopt(pycurl.DNS_CACHE_TIMEOUT, 3600)
-    c.setopt(pycurl.FOLLOWLOCATION, 1)
-    c.setopt(pycurl.MAXREDIRS, 5)
-    c.setopt(pycurl.USERAGENT, '212')
-    c.setopt(pycurl.ENCODING, 'identity')
-    c.setopt(pycurl.COOKIEJAR, 'c00kiejar')
-    c.setopt(pycurl.CONNECTTIMEOUT, 60)
-    c.setopt(pycurl.IPRESOLVE, pycurl.IPRESOLVE_V4)
-#for args in self.addheaders: h.putheader(*args)
-    h.endheaders()
-    h.sock.settimeout(config.http_timeout)
-    c.perform()
-    r.finalize()
-    print c.getinfo(pycurl.HTTP_CODE)
-    print c.getinfo(pycurl.EFFECTIVE_URL)
-    print c.getinfo(pycurl.RESPONSE_CODE)
-    print c.getinfo(pycurl.TOTAL_TIME)
-    print c.getinfo(pycurl.NAMELOOKUP_TIME)
-    print c.getinfo(pycurl.CONNECT_TIME)
-    print c.getinfo(pycurl.REDIRECT_COUNT)
-    print c.getinfo(pycurl.SIZE_DOWNLOAD)
-    print c.getinfo(pycurl.SPEED_DOWNLOAD)
-    print c.getinfo(pycurl.HEADER_SIZE)
-    print c.getinfo(pycurl.REQUEST_SIZE)
-    print c.getinfo(pycurl.CONTENT_LENGTH_DOWNLOAD)
-    print c.getinfo(pycurl.CONTENT_TYPE)
-    
-    c.close()
-    
 
-    try:
-        response = h.getresponse()
-    except httplib.BadStatusLine, msg:
-        # XXX we should try to parse things like http://bxyqwq:olacfy@213.239.160.18/flz/fdr/barely/index.htm
-        print "***", msg
-        return None
-    page.read = response.read
-    page.header = response.msg
-    #response.close()
+    c = get_curl_handle()
+    d = Download(c)
+    c.setopt(c.URL, url)
+
+    eventloop.add(c)
+    eventloop.loop()
     
-    if response.status == 200:
+    # try:
+    #     c.perform()
+    # except pycurl.error, msg:
+    #    log.error("*** %s" % msg)
+    #    return None    
+        
+    d.finalize()
+    
+    page.header = d
+    page.data = d.body
+    
+    if d.status == 200:
         page.url = url
-    elif response.status == 204:        # No Content
+    elif d.status == 204:        # No Content
         return None
-    elif response.status == 300:        # Multiple Choices
+    elif d.status in [300,       # Multiple Choices
+                      302,       # Found - not really sure how to handle this
+                      ]:        
         # XXX this could be handled much smarter
         return None
-    elif response.status in [301,
-                             302,
-                             303,
-                             ]:
-        page.urls.append(url)
-        if len(page.urls) > 32:
-            print vars(request)
-            raise RuntimeError, "too many redirects"
-        page.url = response.getheader('Location')
-        print 'redirect: %r' % page.url
-        (nscheme, nnetworklocation, npath, nparameters, nquery, nfragment) = urlparse(page.url)
-        if scheme != nscheme:
-            print "*** protocol change detected"
-            return None 
-        if page.url in page.urls:
-            # we have a loop
-            print "*** loop detected"
-            return None
-        request(page, page.url)
-    elif response.status == 400:
-        # bad request
-        # XXX this should not happen
-        return None    
-    elif response.status in [401,       # unauthorized
-                             403,       # access denied
-                             404,       # not fond
-                             405,       # method no supported
-                             410,       # Gone
-                             414,       # Request URI Too Large
-                             423,       # Locked
-                             ]:
+    elif d.status in [400,
+                      401,       # unauthorized
+                      403,       # access denied
+                      404,       # not fond
+                      405,       # method no supported
+                      410,       # Gone
+                      414,       # Request URI Too Large
+                      423,       # Locked
+                      ]:
         return None
-    elif response.status in [500,
-                             502,       # Bad Gateway
-                             ]:
-        # internal error
+    elif d.status in [500,              # internal error
+                      502,              # Bad Gateway
+                      0,                # No Header was send 
+                      ]:
         return None    
     else:
-        print vars(response)
-        print vars(response.msg)
-        raise RuntimeError, "unknown response code"
-
+        # print vars(d)
+        log.exception("unknown response code %r" % d.status)
+        raise RuntimeError, "unknown response code %r" % d.status
     return page
 
 

@@ -62,9 +62,6 @@ config.starturls = ['http://md.hudora.de/',
                     'http://www.uni-koeln.de/~ame45/hdbframe.htm',
                     'http://www.jurawelt.com/studenten/seminararbeiten/',
                     ]
-for x in open('starturls.txt'):
-    config.starturls.append(x.strip())
-#random.shuffle(config.starturls)
 
 # where to save documents
 config.documentdir = 'documents'
@@ -79,8 +76,7 @@ config.averageservergraceperiod = 60
 #
 config.http_useragent = 'Mozilla/5.0 (Macintosh; U; PPC Mac OS X; en) AppleWebKit/125.2 (KHTML, like Gecko) Safari/125.8'
 config.http_accept = '*/*'
-config.http_debug = 2
-config.http_timeout = 120
-
+config.http_debug = 1
+config.http_timeout = 60
 #
 config.supportedprotocols = ['http', 'https']
