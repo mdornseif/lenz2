@@ -1,0 +1,7 @@
+* URLs with spaces in it have to be properbly encoded by the fetcher
+* Sometimes strange characters show up in the fetching queue
+* robots.txt
+* persistence
+* paralell fetches
+* FTP
+* Logging
