@@ -21,7 +21,7 @@ pageoutput = LarbinOutputSystem(config.pagedir)
 class Page:
     def __init__(self):
         self.urls = []
-        self.data = None
+        self.data = ''
 
     def __repr__(self):
         return repr(vars(self))
@@ -31,6 +31,10 @@ class Page:
             self.data = self.read()
         return self.data
 
+    def body_callback(self, buf):
+        self.data = self.data + buf
+                            
+
 def fetch_a_page():
     page = Page()
     page.url = pagefetchqueue.get() 
@@ -38,7 +42,7 @@ def fetch_a_page():
     if not fetcher.fetch(page):
         return None
 
-    dummmy, ext = os.path.splitext(page.url)
+    dummy, ext = os.path.splitext(page.url)
     ext = ext.lower()
     if ext not in config.nonpagesuffixes:
         if page.header.gettype() in config.pagemimetypes:
@@ -71,7 +75,7 @@ def parse_a_page():
     except RuntimeError, msg:
         print "***", msg
         return None
-    
+
     for link in links:
         if link not in dupelist:
             dummmy, ext = os.path.splitext(link)
@@ -85,12 +89,15 @@ def parse_a_page():
     
 def main():
     while len(pagefetchqueue) + len(pageparsequeue) > 0:
+        print '\n\n\ndupelist: %d, pagefetchqueue: %d, pageparsequeue: %d, documentfetchqueue: %d\n\n\n' %(len(dupelist), len(pagefetchqueue), len(pageparsequeue), len(documentfetchqueue))
         while documentfetchqueue:
             fetch_a_document()
             time.sleep(.1)
+        print '\n\n\ndupelist: %d, pagefetchqueue: %d, pageparsequeue: %d, documentfetchqueue: %d\n\n\n' %(len(dupelist), len(pagefetchqueue), len(pageparsequeue), len(documentfetchqueue))
         if pagefetchqueue:
             fetch_a_page()
             time.sleep(.1)
+        print '\n\n\ndupelist: %d, pagefetchqueue: %d, pageparsequeue: %d, documentfetchqueue: %d\n\n\n' %(len(dupelist), len(pagefetchqueue), len(pageparsequeue), len(documentfetchqueue))
         if pageparsequeue:
             parse_a_page()
             time.sleep(.1)

@@ -4,17 +4,19 @@
 
 import httplib, socket
 from urlparse import urlparse
-#import pycurl
+import pycurl
 import servers
 
 from config import config
+
+class response
 
 def request(page, url):
     servers.noteAccess(url)
     print repr(url)
     (scheme, networklocation, path, parameters, query, fragment) = urlparse(url)
     host = networklocation.split(':')[0]
-    #c = pycurl.Curl() 
+    c = pycurl.Curl() 
     try:
         h = httplib.HTTPConnection(networklocation)
     except httplib.InvalidURL, msg:
@@ -28,20 +30,21 @@ def request(page, url):
         h.putrequest('GET', path)
     h.putheader('Accept', config.http_accept)
     h.putheader('User-agent', config.http_useragent)
-    #c.setopt(c.URL, url)
-    #c.setopt(c.HTTPHEADER, [config.http_useragent])
-    #c.setopt(pycurl.VERBOSE, 1)
+    c.setopt(c.URL, url)
+    c.setopt(c.HTTPHEADER, [config.http_useragent])
+    c.setopt(pycurl.VERBOSE, 1)
+    c.setopt(c.WRITEFUNCTION, page.body_callback)
     #CURLOPT_AUTOREFERER
     #CURLOPT_ENCODING identity
-    #c.setopt(pycurl.FOLLOWLOCATION, 1)
-    #c.setopt(pycurl.MAXREDIRS, 5)
+    c.setopt(pycurl.FOLLOWLOCATION, 1)
+    c.setopt(pycurl.MAXREDIRS, 5)
     #for args in self.addheaders: h.putheader(*args)
     h.endheaders()
     h.sock.settimeout(config.http_timeout)
-    #c.perform()
-    #print c.getinfo(pycurl.HTTP_CODE)
-    #print c.getinfo(pycurl.EFFECTIVE_URL)
-    #c.close()
+    c.perform()
+    print c.getinfo(pycurl.HTTP_CODE)
+    print c.getinfo(pycurl.EFFECTIVE_URL)
+    c.close()
     
 
     try:
@@ -52,7 +55,7 @@ def request(page, url):
         return None
     page.read = response.read
     page.header = response.msg
-    response.close()
+    #response.close()
     
     if response.status == 200:
         page.url = url
@@ -71,6 +74,10 @@ def request(page, url):
             raise RuntimeError, "too many redirects"
         page.url = response.getheader('Location')
         print 'redirect: %r' % page.url
+        (nscheme, nnetworklocation, npath, nparameters, nquery, nfragment) = urlparse(page.url)
+        if scheme != nscheme:
+            print "*** protocol change detected"
+            return None 
         if page.url in page.urls:
             # we have a loop
             print "*** loop detected"
