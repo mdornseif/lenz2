@@ -2,68 +2,91 @@ __doc__ = "managment of URLs to crawl"
 
 import urlparse
 import socket
-import serverbase
-import serverblacklist
-import urlbase
+import time
+import pickle
 import urldupcheck
 
-def add(url, protocol = None, host = None, port = None):
+# minimum seconds do wait before we hit a server again
+overloadtime = 60
+overloadlist = {}
 
-    if urldupcheck.isDup(add):
-        return
-    
-    (protocol, host, path, parameters, query, fragment) = urlparse.urlparse(url, 'http', 0)
-
-    # find out which URL to parse
-    s = host.find(':')
-    if s == -1:
-        port = socket.getservbyname(protocol, 'tcp')
-        phost = host + ':' + str(port)
-    else:
-        port = int(host[s+1:])
-        phost = host
-        host = host[:s]
-
-    nurl = urlparse.urlunparse((protocol, phost, path, parameters, query, fragment))
-    serverbase.addServer((protocol, host, port))
-    urlbase.addURL((protocol, host, port), nurl) 
-
-def getURL():
-
-    s = serverbase.getServer()
-    if s == None:
+def isOverloaded(host):
+    if time.time() - overloadlist[host] > overloadtime:
+        del overloadlist[host]
         return None
+    else:
+        return 1
+    
+def overloadAdd(host):
+    overloadlist[host] = time.time()
 
-    firstserver = s
+def ageOverload():
+    now = time.time()
+    for (host, t) in overloadlist.values():
+        if now - t > overloadtime:
+            del overloadlist[host]
 
-    url = urlbase.getURL(s)
+class Frontier:
+    def __init__(self):
+        try:
+            self.queue = pickle.load(open('frontier.pyk'))
+        except:
+            print "creating new frontier"
+            self.queue = []
+            
 
-    while url == None:
-        s = serverbase.getServer()
-        if s == None:
-            return None
-
-        # check if we are in a loop
-        if s == firstserver:
-            return None
+    def __del__(self):
+        pickle.dump(self.queue, open('frontier.pyk', 'w'))
         
-        url = urlbase.getURL(s)
 
-    if serverblacklist.has_key(s):
-        url = getURL()
-        
-    return url
+    def add(self, protocol='', host='', path='', parameters='', query='', fragment=''):
+        "Add an entry to the frontier"
+        #if urldupcheck.isDup(url):
+        #    return
 
-def get():
-    ret = getURL()
-
-    if ret != None:
-        (protocol, host, path, parameters, query, fragment) = urlparse.urlparse(ret, 'http', 0)
-
+        # add portnumber if missing
         s = host.find(':')
-        port = int(host[s+1:])
-        host = host[:s]
+        if s == -1:
+            port = socket.getservbyname(protocol, 'tcp')
+            host = host + ':' + str(port)
+        self.queue.append((protocol, host, path, parameters, query, fragment))
 
-        ret = (protocol, host, port, path, ret)
 
-    return ret
+    def addURL(self, url):
+        "Add an URL to the frontier"
+        self.add(urlparse.urlparse(url, 'http', 0))
+
+
+    def getURL(self):
+        "Get an URL from the frontier"
+        ret = get()
+        if ret == None:
+            return None
+        else:
+            return urlparse.urlunparse(ret)
+
+
+    def get(self):
+        "Get an entry from the frontier"
+
+        if len(self.queue) < 1:
+            return None
+
+        # rotate the queue until we find a suitable value
+        for i in xrange(len(self.queue)):
+            (protocol, host, path, parameters, query, fragment) = self.queue.pop(0)
+            if isOverloaded(host):
+                # reappend it to the end
+                self.queue.append((protocol, host, path, parameters, query, fragment))
+            else:
+                overloadAdd(host)
+                return (protocol, host, path, parameters, query, fragment)
+
+        # all out entries are from overloaded servers
+
+f = Frontier()
+get = f.get
+getURL = f.getURL
+add = f.add
+addURL = f.addURL
+
