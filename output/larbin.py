@@ -7,13 +7,13 @@ import os, os.path
 class LarbinOutputSystem:
     """Deposits Pages in simple directories saving Meta-Data in a seperate file."""
 
-    def __init__(self, directory):
+    def __init__(self, directory, maxfilesperdir = 2000):
         """Directory is where to save the oputput."""
-        self.maxfilesperdir = 2000 
+        self.maxfilesperdir = maxfilesperdir 
         self.basename = directory
         if not os.path.exists(self.basename):
             os.makedirs(self.basename)
-        self.currentdir = '%06d' % self.findlastdir()
+        self.currentdir = 'd%06d' % self.findlastdir()
         self.nextDir()
 
 
@@ -29,14 +29,18 @@ class LarbinOutputSystem:
 
 
     def nextDir(self):
-        cur = int(self.currentdir)
-        cur += 1
-        self.currentdir = '%06d' % cur  
-        os.makedirs(os.path.join(self.basename, self.currentdir))
+        while 1:
+            cur = int(self.currentdir)
+            cur += 1
+            self.currentdir = '%06d' % cur
+            if not os.path.exists(os.path.join(self.basename, self.currentdir)):
+                os.makedirs(os.path.join(self.basename, self.currentdir))
+                break
 
         self.filecounter = 0
         indexfilepath = os.path.join(self.basename, self.currentdir, 'index.txt')
         self.indexfile = open(indexfilepath, 'w')
+        self.indexfile.write('#\n')
 
 
     def savePagefile(self, page, fd):
